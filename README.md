@@ -23,7 +23,7 @@ source admin-openrc.sh
 env | grep OS_ > openstack.env
 ```bash
 
-### 2. Build the Docker image
+*** 2. Build the Docker image***
 Build the container using the provided `Dockerfile`:
 
 ```bash
