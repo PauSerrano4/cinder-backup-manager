@@ -21,7 +21,6 @@ Extract your OpenStack environment variables into a `.env` file to securely pass
 ```bash
 source admin-openrc.sh
 env | grep OS_ > openstack.env
-```bash
 
 *** 2. Build the Docker image***
 Build the container using the provided `Dockerfile`:
