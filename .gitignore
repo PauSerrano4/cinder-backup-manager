@@ -1,6 +1,7 @@
 # Entorns virtuals
 venv/
 env/
+*.env
 
 # Credencials d'OpenStack (VITAL NO PUJAR-HO)
 *.sh

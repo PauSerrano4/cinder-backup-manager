@@ -1,6 +1,7 @@
 import openstack
 import datetime
 import streamlit as st
+import re
 
 # ---------------------------------------------------------
 # WEB PAGE CONFIGURATION
@@ -42,7 +43,6 @@ else:
                 
             st.write(f"Found **{len(volumes)} volumes** in the cloud.")
             
-            # Create a progress bar to make it more visual
             progress_bar = st.progress(0)
             
             for index, volume in enumerate(volumes):
@@ -54,7 +54,6 @@ else:
                         
                         st.write(f"🔄 Volume is in use. Creating Snapshot: `{backup_name}`...")
                         
-                        # Actual API code
                         conn.block_storage.create_snapshot(
                             volume_id=volume.id,
                             name=backup_name,
@@ -65,10 +64,9 @@ else:
                     else:
                         st.warning("⚠️ Volume is not attached to any instance. Skipping.")
                 
-                # Update the progress bar
                 progress_bar.progress((index + 1) / len(volumes))
                 
-            st.balloons() # Final success animation
+            st.balloons()
             st.success("=== Backup Process Finished ===")
 
     # --- TAB 2: CLEANUP OF OLD BACKUPS ---
@@ -88,15 +86,43 @@ else:
                 for snap in snapshots:
                     if snap.name and snap.name.startswith("auto-backup"):
                         try:
-                            creation_date = datetime.datetime.fromisoformat(snap.created_at.replace('Z', '+00:00'))
+                            creation_date = None
                             
-                            if creation_date < limit_date:
-                                st.error(f"🗑️ Deleting old backup: {snap.name} (Created: {creation_date.strftime('%Y-%m-%d')})")
-                                conn.block_storage.delete_snapshot(snap.id)
-                                deleted_count += 1
+                            # Method 1: Try to parse date from OpenStack metadata
+                            if getattr(snap, 'created_at', None):
+                                try:
+                                    date_str = snap.created_at.replace('Z', '+00:00')
+                                    creation_date = datetime.datetime.fromisoformat(date_str)
+                                except ValueError:
+                                    pass
+                            
+                            # Method 2: Bulletproof fallback - Parse date directly from snapshot name
+                            if not creation_date:
+                                match = re.search(r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}(?:-\d{2})?)$', snap.name)
+                                if match:
+                                    date_str = match.group(1)
+                                    # Handle both old format (without seconds) and new format
+                                    if len(date_str) == 16:
+                                        creation_date = datetime.datetime.strptime(date_str, '%Y-%m-%d_%H-%M')
+                                    else:
+                                        creation_date = datetime.datetime.strptime(date_str, '%Y-%m-%d_%H-%M-%S')
+
+                            # Execution: Assign UTC and compare dates safely
+                            if creation_date:
+                                if creation_date.tzinfo is None:
+                                    creation_date = creation_date.replace(tzinfo=datetime.timezone.utc)
+                                
+                                if creation_date < limit_date:
+                                    st.error(f"🗑️ Deleting old backup: {snap.name}")
+                                    conn.block_storage.delete_snapshot(snap.id)
+                                    deleted_count += 1
+                                else:
+                                    st.write(f"✅ Keeping recent backup: {snap.name}")
                             else:
-                                st.write(f"✅ Keeping recent backup: {snap.name}")
+                                st.warning(f"⚠️ Could not extract date from {snap.name}")
+                                
                         except Exception as e:
-                            st.write(f"❌ Could not verify the date for {snap.name}.")
+                            # If it fails, show the exact reason
+                            st.write(f"❌ Error processing {snap.name}. Detail: {str(e)}")
                 
                 st.success(f"Cleanup finished. Deleted **{deleted_count}** obsolete backups.")

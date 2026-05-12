@@ -1,0 +1,19 @@
+# Entorns virtuals
+venv/
+env/
+*.env
+
+# Carpetes de Git i documentació
+.git/
+docs/
+*.tex
+*.pdf
+
+# Credencials
+*.sh
+*openrc*
+
+# Fitxers temporals de Python
+__pycache__/
+*.pyc
+.streamlit/
