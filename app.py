@@ -68,14 +68,14 @@ else:
                 # Update the progress bar
                 progress_bar.progress((index + 1) / len(volumes))
                 
-            st.balloons() # Final success animation!
+            st.balloons() # Final success animation
             st.success("=== Backup Process Finished ===")
 
     # --- TAB 2: CLEANUP OF OLD BACKUPS ---
     with tab2:
         st.subheader("Clean Up Obsolete Backups")
         
-        # A graphical slider so the professor can see you can parameterize it
+        # Graphical slider to select retention period
         retention_days = st.slider("How many days do you want to keep the backups?", min_value=1, max_value=14, value=3)
         
         if st.button("🗑️ Start Cleanup of Old Backups"):

@@ -35,31 +35,47 @@ for volume in volumes:
 
 print("\n=== Backup process finished ===\n")
 
-# PART 2: CLEANUP OF OLD BACKUPS
-print("=== Starting Cleanup of Old Backups ===")
-
-# Request all snapshots from Cinder
-snapshots = list(conn.block_storage.snapshots())
-retention_days = 3  # Keep backups for 3 days
-limit_date = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
-
-deleted_count = 0
-
-for snap in snapshots:
-    # Only process snapshots created by this script
-    if snap.name and snap.name.startswith("auto-backup"):
-        # Convert OpenStack creation date to a Python datetime object
-        try:
-            # Format handling for OpenStack date string
-            creation_date = datetime.datetime.fromisoformat(snap.created_at.replace('Z', '+00:00'))
-            
-            if creation_date < limit_date:
-                print(f" -> Deleting old backup: {snap.name} (Created: {creation_date.strftime('%Y-%m-%d')})")
-                conn.block_storage.delete_snapshot(snap.id)
-                deleted_count += 1
-            else:
-                print(f" -> Keeping recent backup: {snap.name}")
-        except Exception as e:
-            print(f" -> Could not verify date for {snap.name}. Error: {e}")
-
-print(f"\n=== Cleanup finished. Deleted {deleted_count} old backups ===")
+# --- TAB 2: CLEANUP OF OLD BACKUPS ---
+    with tab2:
+        st.subheader("Clean Up Obsolete Backups")
+        
+        # A graphical slider to parameterize the retention policy
+        retention_days = st.slider("How many days do you want to keep the backups?", min_value=1, max_value=14, value=3)
+        
+        if st.button("🗑️ Start Cleanup of Old Backups"):
+            with st.spinner('Analyzing old snapshots...'):
+                snapshots = list(conn.block_storage.snapshots())
+                limit_date = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
+                
+                deleted_count = 0
+                
+                for snap in snapshots:
+                    if snap.name and snap.name.startswith("auto-backup"):
+                        try:
+                            creation_date = None
+                            
+                            # 1. Primary Method: Try to get the date from OpenStack metadata
+                            if getattr(snap, 'created_at', None):
+                                date_str = snap.created_at.replace('Z', '+00:00')
+                                creation_date = datetime.datetime.fromisoformat(date_str)
+                            
+                            # 2. Ensure timezone is set to UTC for safe comparison
+                            if creation_date and creation_date.tzinfo is None:
+                                creation_date = creation_date.replace(tzinfo=datetime.timezone.utc)
+                            
+                            # 3. Execution: Compare and delete if older than threshold
+                            if creation_date:
+                                if creation_date < limit_date:
+                                    st.error(f"🗑️ Deleting old backup: {snap.name} (Created: {creation_date.strftime('%Y-%m-%d')})")
+                                    conn.block_storage.delete_snapshot(snap.id)
+                                    deleted_count += 1
+                                else:
+                                    st.write(f"✅ Keeping recent backup: {snap.name}")
+                            else:
+                                st.warning(f"⚠️ Skipping {snap.name}: No valid creation date found.")
+                                
+                        except Exception as e:
+                            # Show the exact error message to facilitate debugging
+                            st.write(f"❌ Could not verify the date for {snap.name}. Detail: {str(e)}")
+                
+                st.success(f"Cleanup finished. Deleted **{deleted_count}** obsolete backups.")
