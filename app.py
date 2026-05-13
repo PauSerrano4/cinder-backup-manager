@@ -84,6 +84,8 @@ else:
                 
                 deleted_count = 0
                 
+                # Step 1: Filter and parse dates for all our auto-backups
+                valid_backups = []
                 for snap in snapshots:
                     if snap.name and snap.name.startswith("auto-backup"):
                         try:
@@ -113,17 +115,36 @@ else:
                                 if creation_date.tzinfo is None:
                                     creation_date = creation_date.replace(tzinfo=datetime.timezone.utc)
                                 
-                                if creation_date < limit_date:
-                                    st.error(f"🗑️ Deleting old backup: {snap.name}")
-                                    conn.block_storage.delete_snapshot(snap.id)
-                                    deleted_count += 1
-                                else:
-                                    st.write(f"✅ Keeping recent backup: {snap.name}")
+                                # Temporarily save the parsed date into the object to easily sort later
+                                snap.parsed_date = creation_date
+                                valid_backups.append(snap)
                             else:
                                 st.warning(f"⚠️ Could not extract date from {snap.name}")
                                 
                         except Exception as e:
-                            # If it fails, show the exact reason
                             st.write(f"❌ Error processing {snap.name}. Detail: {str(e)}")
+
+                # Step 2: Group backups by their source volume ID
+                backups_per_volume = {}
+                for snap in valid_backups:
+                    # Some snapshots might not have volume_id attached if the original volume was deleted
+                    vol_id = getattr(snap, 'volume_id', 'unknown') 
+                    if vol_id not in backups_per_volume:
+                        backups_per_volume[vol_id] = []
+                    backups_per_volume[vol_id].append(snap)
+
+                # Step 3: Apply retention policies (Time Limit AND Max Count Limit)
+                for vol_id, snaps_list in backups_per_volume.items():
+                    # Sort the backups for this volume from newest to oldest
+                    snaps_list.sort(key=lambda x: x.parsed_date, reverse=True)
+                    
+                    for index, snap in enumerate(snaps_list):
+                        # Delete if it exceeds the max allowed count OR if it is too old
+                        if index >= max_snapshots or snap.parsed_date < limit_date:
+                            st.error(f"🗑️ Deleting obsolete backup: {snap.name}")
+                            conn.block_storage.delete_snapshot(snap.id)
+                            deleted_count += 1
+                        else:
+                            st.success(f"✅ Keeping recent backup: {snap.name}")
                 
                 st.success(f"Cleanup finished. Deleted **{deleted_count}** obsolete backups.")
