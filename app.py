@@ -75,6 +75,7 @@ else:
         
         # Graphical slider to select retention period
         retention_days = st.slider("How many days do you want to keep the backups?", min_value=1, max_value=14, value=3)
+        max_snapshots = st.number_input("Max snapshots to keep per volume", min_value=1, value=3)
         
         if st.button("🗑️ Start Cleanup of Old Backups"):
             with st.spinner('Analyzing old snapshots...'):
